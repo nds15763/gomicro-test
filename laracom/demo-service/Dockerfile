@@ -1,29 +1,48 @@
-# 使用alpine
-# 第一行 FROM 指令表示基于 Linux Alpine 的最新版作为基础镜像，
-# Alpine 是一个面向安全的轻型 Linux 发行版，
-# 不同于普通的 Linux 发行版，Alpine 采用了 musl libc 和 busybox 以减小系统的体积和运行时资源消耗，
-# Alpine Docker 镜像也继承了 Alpine Linux 发行版的这些优势，相比于其他 Docker 镜像，
-# 它的体积非常小，仅仅只有 5 MB 左右（而 Ubuntu 系列镜像通常会接近 200 MB）。
-FROM alpine:latest
+# 使用 golang 官方镜像提供 Go 运行环境，并且命名为 buidler 以便后续引用
+FROM golang:1.14-alpine3.11  as builder
+
+# 启用 Go Modules 并设置 GOPROXY
+ENV GO111MODULE on
+ENV GOPROXY https://goproxy.cn
 
 # 第二行指令用于更新 Alpine 软件镜像源（推荐阿里、清华或中科大的镜像源），
 # 在国内各种 Docker 镜像构建，这都是必不可少的步骤。
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
-# 接下来我们更新 Alpine 的包管理器 apk，并安装 bash 和 supervisor，前者用于执行 shell 命令，后者用于管理多个服务的自启动。
-RUN apk update && apk add --no-cache bash supervisor
+# 安装 git
+RUN apk --no-cache add git
 
-# 在 Docker 镜像中创建一个 /app 目录
+# 设置工作目录
+WORKDIR /app/laracom-demo-service
+
+# 将当前项目所在目录代码拷贝到镜像中
+COPY . .
+
+# 下载依赖
+RUN go mod download
+
+# 构建二进制文件，添加来一些额外参数以便可以在 Alpine 中运行它
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o laracom-demo-service
+
+# 下面是第二阶段的镜像构建，和之前保持一致
+FROM alpine:latest
+
+
+# 更新安装源
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+
+# 安装相关软件
+RUN apk update && apk add --no-cache bash supervisor ca-certificates
+
+# 和上个阶段一样设置工作目录
 RUN mkdir /app
-
-# WORKDIR指令用于指定容器的一个目录，容器启动时执行的命令会在该目录下执行，相当于设置了容器的工作目录。
 WORKDIR /app
 
-# 然后把 Dockerfile 所在目录下的 demo-service 二进制文件（位于宿主机，稍后会通过运行 go build 命令生成）拷贝到镜像的 /app 目录下
-ADD demo-service.exe /app/demo-service
+# 这一步不再从宿主机拷贝二进制文件，而是从上一个阶段构建的 builder 容器中拉取，神奇吧
+COPY --from=builder /app/laracom-demo-service/laracom-demo-service .
 
-# 把当前目录下的 supervisord.conf 配置文件拷贝到镜像的 /etc/ 目录下。
+
 ADD supervisord.conf /etc/supervisord.conf
 
-# 最后一行 CMD 指令表示容器启动时默认执行的命令，这里我们启动 Supervisor，并通过它来启动和管理 gRPC 和 HTTP 服务。
+# 和之前一样通过 Supervisor 管理服务
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
