@@ -10,6 +10,7 @@ require (
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/protobuf v1.4.2
 	github.com/gorilla/mux v1.7.4
+	github.com/jinzhu/gorm v1.9.12 // indirect
 	github.com/micro/go-micro v1.18.0
 	github.com/micro/go-micro/v2 v2.7.0
 	github.com/miekg/dns v1.1.29 // indirect
