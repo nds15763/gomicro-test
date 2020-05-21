@@ -1,4 +1,4 @@
-module laracom
+module github.com/nds15763/gomicro-test/laracom/demo-service
 
 go 1.14
 
